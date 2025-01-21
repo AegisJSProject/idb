@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="color-scheme" content="light dark" />
+		<meta name="referrerpolicy" content="no-referrer" />
+		<title>Yet another Todo App</title>
+		<script type="importmap">
+			{
+				"imports": {
+					"@aegisjsproject/idb": "../idb.js",
+					"@aegisjsproject/styles/": "https://unpkg.com/@aegisjsproject/styles@0.2.6/",
+					"@aegisjsproject/parsers/": "https://unpkg.com/@aegisjsproject/parsers@0.0.16/",
+					"@shgysk8zer0/polyfills": "https://unpkg.com/@shgysk8zer0/polyfills@0.4.8/browser.min.js"
+				}
+			}
+		</script>
+		<link rel="modulepreload" href="../idb.js" referrerpolicy="no-referrer" />
+		<script type="module" src="./index.js" referrerpolicy="no-referrer"></script>
+	</head>
+	<body>
+		<div id="todo-list"></div>
+		<button type="button" popovertarget="add-todo" popovertargetaction="show" accesskey="+" class="btn btn-primary fixed bottom right">
+			<svg xmlns="http://www.w3.org/2000/svg" width="12" height="16" fill="currentColor" viewBox="0 0 12 16">
+				<path fill-rule="evenodd" d="M12 9H7v5H5V9H0V7h5V2h2v5h5v2z"/>
+			</svg>
+			<span>Create</span>
+		</button>
+		<template id="todo-template">
+			<div class="todo-item system-ui">
+				<div class="title clearfix">
+					<span data-field="title"></span>
+					<button type="button" class="btn btn-danger float-right" title="Delete Task" data-task-id="">
+						<svg xmlns="http://www.w3.org/2000/svg" width="12" height="16" fill="currentColor" viewBox="0 0 12 16">
+							<path fill-rule="evenodd" d="M11 2H9c0-.55-.45-1-1-1H5c-.55 0-1 .45-1 1H2c-.55 0-1 .45-1 1v1c0 .55.45 1 1 1v9c0 .55.45 1 1 1h7c.55 0 1-.45 1-1V5c.55 0 1-.45 1-1V3c0-.55-.45-1-1-1zm-1 12H3V5h1v8h1V5h1v8h1V5h1v8h1V5h1v9zm1-10H2V3h9v1z"/>
+						</svg>
+					</button>
+				</div>
+				<p class="description" data-field="description"></p>
+				<div>
+					<span>Created:</span>
+					<time data-field="createdAt"></time>
+				</div>
+				<details data-field="attachments">
+					<summary>Attachments</summary>
+				</details>
+			</div>
+		</template>
+		<div id="add-todo" popover="manual">
+			<form id="create-todo">
+				<fieldset>
+					<legend>Create new Todo</legend>
+					<div class="form-group">
+						<label for="todo-title" class="input-label required">Title</label>
+						<input type="text" name="title" id="todo-title" class="input" placeholder="Task Title" required="" />
+					</div>
+					<div class="form-group">
+						<label for="todo-description" class="input-label required">Description</label>
+						<input type="text" name="description" id="todo-description" class="input" placeholder="Task description" required="" />
+					</div>
+					<div class="form-group">
+						<label for="todo-attachments" class="input-label">Attachments</label>
+						<input type="file" name="attachments" id="todo-attachemnts" class="input" accept="image/*" multiple="" />
+					</div>
+				</fieldset>
+				<div>
+					<button type="submit" class="btn btn-success">
+						<svg xmlns="http://www.w3.org/2000/svg" width="12" height="16" fill="currentColor" viewBox="0 0 12 16">
+							<path fill-rule="evenodd" d="M12 9H7v5H5V9H0V7h5V2h2v5h5v2z"/>
+						</svg>
+						<span>Create</span>
+					</button>
+					<button type="reset" class="btn btn-danger">
+						<svg xmlns="http://www.w3.org/2000/svg" width="12" height="16" fill="currentColor" viewBox="0 0 12 16">
+							<path fill-rule="evenodd" d="M7.48 8l3.75 3.75-1.48 1.48L6 9.48l-3.75 3.75-1.48-1.48L4.52 8 .77 4.25l1.48-1.48L6 6.52l3.75-3.75 1.48 1.48L7.48 8z"/>
+						</svg>
+						<span>Close</span>
+					</button>
+				</div>
+			</form>
+		</div>
+	</body>
+</html>
