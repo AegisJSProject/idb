@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.0.1] - 2025-01-23
+
+### Added
+- Add async iterator of object stores using `IDBCursorWithValue`
+
 ## [v1.0.0] - 2025-01-21
 
 Initial Release

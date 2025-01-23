@@ -302,3 +302,97 @@ export async function getAllKeys(db, storeName, { query, count, signal } = {}) {
 		return await handleIDBRequest(store.getAllKeys(query, count), { signal });
 	}
 }
+
+/**
+ * Opens an IDB Cursor as an asynchronous iterable, allowing iteration over the results of a database query.
+ *
+ * @async
+ * @generator
+ * @param {IDBDatabase} db The IndexedDB database.
+ * @param {string} storeName The name of the object store.
+ * @param {object} [options] Options for the cursor.
+ * @param {IDBTransactionMode} [options.mode="readonly"] The transaction mode.
+ * @param {IDBTransactionDurability} [options.durability="default"] The transaction durability.
+ * @param {IDBKeyRange|IDBValidKey|null} [options.query=null] The key range to use for the cursor.
+ * @param {IDBCursorDirection} [options.direction="next"] The cursor direction.
+ * @param {AbortSignal} [options.signal] An AbortSignal to allow aborting the operation.
+ * @yields {IDBCursorWithValue} The current cursor value.
+ * @throws {Error} If the operation is aborted via the AbortSignal or if an error occurs during the transaction or cursor operation.
+ */
+export async function *iterateObjectStore(db, storeName, {
+	mode = 'readonly',
+	durability = 'default',
+	query = null,
+	direction = 'next',
+	signal,
+} = {}) {
+	if (signal instanceof AbortSignal && signal.aborted) {
+		throw signal.reason;
+	} else if (! (db instanceof IDBDatabase)) {
+		throw new TypeError('Not an IDBDatabase instance.');
+	} else if (typeof storeName !== 'string' || storeName.length === 0) {
+		throw new TypeError('Store name must be a non-empty string.');
+	} else {
+		const abrt = new AbortController();
+		const sig = signal instanceof AbortSignal ? AbortSignal.any([signal, abrt.signal]) : abrt.signal;
+		const transaction = db.transaction(storeName, mode, { durability });
+		const store = transaction.objectStore(storeName);
+		const cursorRequest = store.openCursor(query, direction);
+		let deferred;
+
+		const stream = new ReadableStream({
+			start(controller) {
+				transaction.addEventListener('abort', ({ target }) => {
+					controller.error(target.error);
+					abrt.abort(target.error);
+				}, { signal: sig });
+
+				transaction.addEventListener('error', ({ target }) => {
+					controller.error(target.error);
+					abrt.abort(target.error);
+				}, { signal: sig });
+
+				cursorRequest.addEventListener('success', async ({ target }) => {
+					deferred = Promise.withResolvers();
+
+					if (target.result instanceof IDBCursorWithValue) {
+						controller.enqueue(target.result);
+						await deferred.promise;
+						target.result.continue();
+					} else {
+						controller.close();
+						abrt.abort();
+					}
+				}, { signal: sig });
+
+				cursorRequest.addEventListener('error', ({ target }) => {
+					controller.error(target.error);
+					abrt.abort(target.error);
+				}, { signal: sig });
+
+				if (signal instanceof AbortSignal) {
+					signal.addEventListener('abort', ({ target }) => {
+						controller.error(target.reason);
+						abrt.abort(target.reason);
+
+						// No need to abort if read-only
+						if (transaction.mode !== 'readonly') {
+							transaction.abort();
+						}
+					}, { signal: abrt.signal });
+				}
+			},
+			pull() {
+				if (deferred?.resolve instanceof Function) {
+					deferred.resolve();
+				}
+			},
+			cancel(reason) {
+				abrt.abort(reason);
+				transaction.abort();
+			}
+		});
+
+		yield *stream;
+	}
+}

@@ -6,17 +6,25 @@
 		<meta name="color-scheme" content="light dark" />
 		<meta name="referrerpolicy" content="no-referrer" />
 		<title>Yet another Todo App</title>
-		<script type="importmap">
+		<meta http-equiv="Content-Security-Policy" content="
+			default-src 'none';
+			image-src blob:
+			style-src 'none';
+			script-src 'self' https://unpkg.com/@aegisjsproject/ https://unpkg.com/@shgysk8zer0/ 'sha384-chMNSnwwCoZFECmJz+cLpQkoHI0/RhhSrkBdAkAjcZam4mP8uVpes1SPyYXtdRVN';
+			trusted-types aegis-sanitizer#html;
+			require-trusted-types-for 'script';
+		" />
+		<script type="importmap" integrity="sha384-chMNSnwwCoZFECmJz+cLpQkoHI0/RhhSrkBdAkAjcZam4mP8uVpes1SPyYXtdRVN">
 			{
 				"imports": {
 					"@aegisjsproject/idb": "../idb.js",
 					"@aegisjsproject/styles/": "https://unpkg.com/@aegisjsproject/styles@0.2.6/",
-					"@aegisjsproject/parsers/": "https://unpkg.com/@aegisjsproject/parsers@0.0.16/",
-					"@shgysk8zer0/polyfills": "https://unpkg.com/@shgysk8zer0/polyfills@0.4.8/browser.min.js"
+					"@aegisjsproject/parsers/": "https://unpkg.com/@aegisjsproject/parsers@0.0.16/"
 				}
 			}
 		</script>
 		<link rel="modulepreload" href="../idb.js" referrerpolicy="no-referrer" />
+		<script type="application/javascript" defer="" referrerpolicy="no-referrer" fetchpriority="auto" crossorigin="anonymous" integrity="sha384-S6IiMVrhK2h8SpNcu3w1ybvXAcAPLcN6DC8dy35bqDEcqIt4wP5zBGTYd96qtGRi" src="https://unpkg.com/@shgysk8zer0/polyfills@0.4.8/browser.min.js"></script>
 		<script type="module" src="./index.js" referrerpolicy="no-referrer"></script>
 	</head>
 	<body>
@@ -30,6 +38,7 @@
 		<template id="todo-template">
 			<div class="todo-item system-ui">
 				<div class="title clearfix">
+					<input type="checkbox" class="task-done" data-field="complete" data-task-id="" />
 					<span data-field="title"></span>
 					<button type="button" class="btn btn-danger float-right" title="Delete Task" data-task-id="">
 						<svg xmlns="http://www.w3.org/2000/svg" width="12" height="16" fill="currentColor" viewBox="0 0 12 16">
@@ -38,6 +47,10 @@
 					</button>
 				</div>
 				<p class="description" data-field="description"></p>
+				<div>
+					<span>Due:</span>
+					<time data-field="due"></time>
+				</div>
 				<div>
 					<span>Created:</span>
 					<time data-field="createdAt"></time>
@@ -53,11 +66,15 @@
 					<legend>Create new Todo</legend>
 					<div class="form-group">
 						<label for="todo-title" class="input-label required">Title</label>
-						<input type="text" name="title" id="todo-title" class="input" placeholder="Task Title" required="" />
+						<input type="text" name="title" id="todo-title" class="input" placeholder="Task Title" autocomplete="off" required="" />
 					</div>
 					<div class="form-group">
-						<label for="todo-description" class="input-label required">Description</label>
-						<input type="text" name="description" id="todo-description" class="input" placeholder="Task description" required="" />
+						<label for="todo-description" class="input-label">Description</label>
+						<input type="text" name="description" id="todo-description" class="input" placeholder="Task description" autocomplete="off" />
+					</div>
+					<div class="form-group">
+						<label for="todo-due-date" class="input-label required">Due Date</label>
+						<input type="date" name="due" id="todo-due-date" class="input" />
 					</div>
 					<div class="form-group">
 						<label for="todo-attachments" class="input-label">Attachments</label>
