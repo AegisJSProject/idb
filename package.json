@@ -1,6 +1,6 @@
 {
   "name": "@aegisjsproject/idb",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Simple, promise-based IndexedDB CRUD library.",
   "keywords": [
     "idb",
