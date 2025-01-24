@@ -6,9 +6,30 @@ import { statusBoxes, positions, floats, displays, fonts, utilities } from '@aeg
 import { deleteItem, addItem, openDB, getItem, putItem, getAllItems } from '@aegisjsproject/idb';
 import { css } from '@aegisjsproject/parsers/css.js';
 
-const DB_NAME = 'todos';
-const DB_VERSION = 1;
+// const DB_NAME = 'todos';
+// const DB_VERSION = 1;
 const STORE_NAME = 'list';
+
+export const SCHEMAS = {
+	todos: {
+		name: 'todos',
+		version: 3,
+		stores: {
+			list: {
+				keyPath: 'id',
+				autoIncrement: false,
+				indexes: {
+					name: {
+						unique: 'true',
+					},
+					due: {},
+				},
+			},
+		},
+	},
+};
+
+const open = async name => await openDB(SCHEMAS[name].name, { version: SCHEMAS[name].version, schema: SCHEMAS[name] });
 
 const handleError = err => {
 	const el = document.createElement('div');
@@ -50,14 +71,14 @@ document.adoptedStyleSheets = [
  * @param {object} event
  * @param {IDBOpenDBRequest} [event.target]
  */
-async function onUpgrade({ target }) {
-	if (! target.result.objectStoreNames.contains(STORE_NAME)) {
-		const store = target.result.createObjectStore(STORE_NAME, { keyPath: 'id' });
-		store.createIndex('due', 'due', { unique: false });
-		store.createIndex('completed', 'completed', { unique: false });
-		store.createIndex('title', 'title', { unique: false });
-	}
-}
+// async function onUpgrade({ target }) {
+// 	if (! target.result.objectStoreNames.contains(STORE_NAME)) {
+// 		const store = target.result.createObjectStore(STORE_NAME, { keyPath: 'id' });
+// 		store.createIndex('due', 'due', { unique: false });
+// 		store.createIndex('completed', 'completed', { unique: false });
+// 		store.createIndex('title', 'title', { unique: false });
+// 	}
+// }
 
 function createTodo({ id, title, description, completed, createdAt, due, attachments = [] }, template = document.getElementById('todo-template')) {
 	const item = template.content.cloneNode(true);
@@ -94,7 +115,8 @@ function createTodo({ id, title, description, completed, createdAt, due, attachm
 
 document.getElementById('create-todo').addEventListener('submit', async event => {
 	event.preventDefault();
-	const db = await openDB(DB_NAME, { version: DB_VERSION });
+	// const db = await openDB(DB_NAME, { version: DB_VERSION });
+	const db = await open('todos');
 
 	try {
 		const item = new FormData(event.target);
@@ -121,7 +143,7 @@ document.getElementById('create-todo').addEventListener('submit', async event =>
 
 document.getElementById('create-todo').addEventListener('reset', event =>  event.target.parentElement.hidePopover());
 
-openDB(DB_NAME, { version: DB_VERSION, onUpgrade }).then(async db => {
+open('todos').then(async db => {
 	try {
 		const template = document.getElementById('todo-template');
 		const tasks = await getAllItems(db, STORE_NAME).then(tasks => tasks.toSorted((a, b) => {
@@ -151,7 +173,7 @@ document.body.addEventListener('click', async ({ target }) => {
 
 	if (btn instanceof HTMLButtonElement && btn.dataset.hasOwnProperty('taskId')) {
 		const container = target.closest('.todo-item');
-		const db = await openDB(DB_NAME, { version: DB_VERSION });
+		const db = await open('todos');
 
 		try {
 			await Promise.all([
@@ -176,7 +198,8 @@ document.body.addEventListener('click', async ({ target }) => {
 
 document.body.addEventListener('change', async ({ target }) => {
 	if (target.classList.contains('task-done') && target.dataset.hasOwnProperty('taskId')) {
-		const db = await openDB(DB_NAME, { version: DB_VERSION });
+		const db = await open('todos');
+		// const db = await openDB(DB_NAME, { version: DB_VERSION });
 
 		try {
 			const task = await getItem(db, STORE_NAME, target.dataset.taskId);
