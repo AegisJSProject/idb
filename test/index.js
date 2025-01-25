@@ -6,84 +6,88 @@ import { statusBoxes, positions, floats, displays, fonts, utilities } from '@aeg
 import { deleteItem, addItem, openDB, getItem, putItem, getAllItems } from '@aegisjsproject/idb';
 import { css } from '@aegisjsproject/parsers/css.js';
 
-// const DB_NAME = 'todos';
-// const DB_VERSION = 1;
 const STORE_NAME = 'list';
 
 export const SCHEMAS = {
 	todos: {
 		name: 'todos',
-		version: 3,
+		version: 4,
 		stores: {
 			list: {
 				keyPath: 'id',
 				autoIncrement: false,
 				indexes: {
-					name: {
-						unique: 'true',
-					},
-					due: {},
+					name: { unique: 'true' },
 				},
 			},
+			second: {
+				autoIncrement: true,
+			}
 		},
 	},
 };
 
-const open = async name => await openDB(SCHEMAS[name].name, { version: SCHEMAS[name].version, schema: SCHEMAS[name] });
+async function open(name, { signal = AbortSignal.timeout(100) } = {}) {
+	return await openDB(SCHEMAS[name].name, { version: SCHEMAS[name].version, schema: SCHEMAS[name], signal });
+}
 
-const handleError = err => {
+async function render({ signal } = {}) {
+	const db = await open('todos', { signal });
+
+	try {
+		const template = document.getElementById('todo-template');
+
+		const tasks = await getAllItems(db, STORE_NAME).then(tasks => tasks.toSorted((a, b) => {
+			if (a.due instanceof Date && ! (b.due instanceof Date)) {
+				return -1;
+			} else if (b.due instanceof Date && ! (a.due instanceof Date)) {
+				return 1;
+			} else if (b.due instanceof Date && a.due instanceof Date) {
+				return Math.sign(a.due.getTime() - b.due.getTime());
+			} else if (b.completed !== a.completed) {
+				return b.completed ? -1 : 1;
+			} else {
+				return Math.sign(a.createdAt.getTime() - b.createdAt.getTime());
+			}
+		}));
+
+		document.getElementById('todo-list').append(...tasks.map(todo => createTodo(todo, template)));
+	} catch(err) {
+		handleError(err);
+	} finally {
+		db.close();
+	}
+}
+
+async function handleError(err) {
 	const el = document.createElement('div');
+	const controller = new AbortController();
+	const { resolve, promise } = Promise.withResolvers();
 	el.popover = 'auto';
 	el.classList.add('status-box', 'error');
-	el.textContent = err.message;
+	el.textContent = `[${err.name}] "${err.message}"`;
 	document.body.append(el);
 	el.showPopover();
 
 	el.addEventListener('toggle', ({ target, newState }) => {
 		if (newState === 'closed') {
 			target.remove();
+			controller.abort();
+			resolve();
 		}
-	});
-};
+	}, { signal: controller.signal });
 
-document.adoptedStyleSheets = [
-	properties, baseTheme, lightTheme, darkTheme, btn, btnPrimary, btnSuccess, btnDanger,
-	forms, statusBoxes, positions, floats, displays, fonts, utilities, css`#todo-list {
-		width: min(95vw, 600px);
-		margin-inline: auto;
-	}
+	return promise;
+}
 
-	.todo-item {
-		padding: 1.2em;
-		border: 1px solid rgb(88, 88, 88);
-		border-radius: 8px;
-		margin-top: 0.2em;
-		transition: opacity 400ms linear;
-
-		&.task-completed {
-			opacity: 0.4;
-		}
-	}`,
-];
-
-/**
- *
- * @param {object} event
- * @param {IDBOpenDBRequest} [event.target]
- */
-// async function onUpgrade({ target }) {
-// 	if (! target.result.objectStoreNames.contains(STORE_NAME)) {
-// 		const store = target.result.createObjectStore(STORE_NAME, { keyPath: 'id' });
-// 		store.createIndex('due', 'due', { unique: false });
-// 		store.createIndex('completed', 'completed', { unique: false });
-// 		store.createIndex('title', 'title', { unique: false });
-// 	}
-// }
-
-function createTodo({ id, title, description, completed, createdAt, due, attachments = [] }, template = document.getElementById('todo-template')) {
+function createTodo(
+	{ id, title, description, completed, createdAt, due, attachments = [] },
+	template = document.getElementById('todo-template'),
+) {
 	const item = template.content.cloneNode(true);
 	const listItem = item.querySelector('.todo-item');
 	const checked = item.querySelector('[data-field="complete"]');
+
 	checked.checked = completed;
 	checked.dataset.taskId = id;
 
@@ -91,6 +95,7 @@ function createTodo({ id, title, description, completed, createdAt, due, attachm
 	item.querySelector('[data-field="description"]').textContent = description;
 	item.querySelectorAll('[data-task-id]').forEach(el => el.dataset.taskId = id);
 	item.querySelector('[data-field="createdAt"]').textContent = createdAt.toLocaleDateString(navigator.language, { dateStyle: 'medium' });
+
 	listItem.id = id;
 	listItem.dataset.createdAt = createdAt.toISOString();
 	listItem.classList.toggle('task-completed', completed);
@@ -112,10 +117,50 @@ function createTodo({ id, title, description, completed, createdAt, due, attachm
 	return item;
 }
 
+document.adoptedStyleSheets = [
+	properties, baseTheme, lightTheme, darkTheme, btn, btnPrimary, btnSuccess, btnDanger,
+	forms, statusBoxes, positions, floats, displays, fonts, utilities,
+	css`#todo-list {
+		width: min(95vw, 600px);
+		margin-inline: auto;
+	}
+
+	.todo-item {
+		padding: 1.2em;
+		border: 1px solid rgb(88, 88, 88);
+		border-radius: 8px;
+		margin-top: 0.2em;
+		transition: opacity 400ms linear;
+
+		&.task-completed {
+			opacity: 0.4;
+		}
+	}
+
+	.attachments-container:has([data-field="attachments"]:empty),
+	.due-container:has([data-field="due"]:empty) {
+		display: none;
+	}
+
+	[data-field="description"]:empty {
+		display: none;
+	}
+
+	:popover-open {
+		border: none;
+		padding: 1.3em;
+		border-radius: 8px;
+		margin-top: auto;
+
+		&::backdrop {
+			background-color: rgba(0, 0, 0, 0.4);
+			backdrop-filter: blur(4px);
+		}
+	}`,
+];
 
 document.getElementById('create-todo').addEventListener('submit', async event => {
 	event.preventDefault();
-	// const db = await openDB(DB_NAME, { version: DB_VERSION });
 	const db = await open('todos');
 
 	try {
@@ -141,33 +186,6 @@ document.getElementById('create-todo').addEventListener('submit', async event =>
 	}
 });
 
-document.getElementById('create-todo').addEventListener('reset', event =>  event.target.parentElement.hidePopover());
-
-open('todos').then(async db => {
-	try {
-		const template = document.getElementById('todo-template');
-		const tasks = await getAllItems(db, STORE_NAME).then(tasks => tasks.toSorted((a, b) => {
-			if (a.due instanceof Date && ! (b.due instanceof Date)) {
-				return -1;
-			} else if (b.due instanceof Date && ! (a.due instanceof Date)) {
-				return 1;
-			} else if (b.due instanceof Date && a.due instanceof Date) {
-				return Math.sign(a.due.getTime() - b.due.getTime());
-			} else if (b.completed !== a.completed) {
-				return b.completed ? -1 : 1;
-			} else {
-				return 0;
-			}
-		}));
-
-		document.getElementById('todo-list').append(...tasks.map(todo => createTodo(todo, template)));
-	} catch(err) {
-		handleError(err);
-	} finally {
-		db.close();
-	}
-});
-
 document.body.addEventListener('click', async ({ target }) => {
 	const btn = target.closest('button');
 
@@ -177,7 +195,7 @@ document.body.addEventListener('click', async ({ target }) => {
 
 		try {
 			await Promise.all([
-				deleteItem(db, STORE_NAME, target.dataset.taskId),
+				deleteItem(db, STORE_NAME, btn.dataset.taskId),
 				container.animate([
 					{ opacity: 1, transform: 'none' },
 					{ opacity: 0, transform: 'scale(0)' },
@@ -199,11 +217,9 @@ document.body.addEventListener('click', async ({ target }) => {
 document.body.addEventListener('change', async ({ target }) => {
 	if (target.classList.contains('task-done') && target.dataset.hasOwnProperty('taskId')) {
 		const db = await open('todos');
-		// const db = await openDB(DB_NAME, { version: DB_VERSION });
 
 		try {
 			const task = await getItem(db, STORE_NAME, target.dataset.taskId);
-			console.log(task);
 			task.completed = target.checked;
 			target.closest('.todo-item').classList.toggle('task-completed', target.checked);
 			await putItem(db, STORE_NAME, task);
@@ -214,3 +230,7 @@ document.body.addEventListener('change', async ({ target }) => {
 		}
 	}
 }, { passive: true });
+
+document.getElementById('create-todo').addEventListener('reset', event =>  event.target.parentElement.hidePopover());
+
+render();

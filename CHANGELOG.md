@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.0.3] - 2025-01-24
+
+### Added
+- Add `fallback` option for `getItem()`
+- Add maintenance `createStore()` and `deleteStore()` functions
+
+### Changed
+- Support both updating DB schema and handling `onUpgrade` when opening a DB
+
+### Fixed
+- `reject()` in `handleIDBRequest()` if a `signal` aborts
+
 ## [v1.0.2] - 2025-01-23
 
 ### Added
