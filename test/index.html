@@ -5,15 +5,18 @@
 		<meta name="viewport" content="width=device-width" />
 		<meta name="color-scheme" content="light dark" />
 		<meta name="referrerpolicy" content="no-referrer" />
-		<title>Yet another Todo App</title>
 		<meta http-equiv="Content-Security-Policy" content="
 			default-src 'none';
-			image-src blob:
+			img-src 'self' blob:;
 			style-src 'none';
+			form-action 'none';
+			connect-src 'none';
 			script-src 'self' https://unpkg.com/@aegisjsproject/ https://unpkg.com/@shgysk8zer0/ 'sha384-chMNSnwwCoZFECmJz+cLpQkoHI0/RhhSrkBdAkAjcZam4mP8uVpes1SPyYXtdRVN';
 			trusted-types aegis-sanitizer#html;
 			require-trusted-types-for 'script';
 		" />
+		<link rel="icon" href="./icon.svg" type="image/svg+xml" sizes="any" />
+		<title>Yet another Todo App</title>
 		<script type="importmap" integrity="sha384-chMNSnwwCoZFECmJz+cLpQkoHI0/RhhSrkBdAkAjcZam4mP8uVpes1SPyYXtdRVN">
 			{
 				"imports": {
@@ -24,7 +27,8 @@
 			}
 		</script>
 		<link rel="modulepreload" href="../idb.js" referrerpolicy="no-referrer" />
-		<script type="application/javascript" defer="" referrerpolicy="no-referrer" fetchpriority="auto" crossorigin="anonymous" integrity="sha384-S6IiMVrhK2h8SpNcu3w1ybvXAcAPLcN6DC8dy35bqDEcqIt4wP5zBGTYd96qtGRi" src="https://unpkg.com/@shgysk8zer0/polyfills@0.4.8/browser.min.js"></script>
+		<link rel="preconnect" href="https://unpkg.com" referrerpolicy="no-referrer" crossorigin="anonymous" />
+		<!-- <script src="https://unpkg.com/@shgysk8zer0/polyfills@0.4.8/browser.min.js" referrerpolicy="no-referrer" fetchpriority="high" crossorigin="anonymous" integrity="sha384-S6IiMVrhK2h8SpNcu3w1ybvXAcAPLcN6DC8dy35bqDEcqIt4wP5zBGTYd96qtGRi" defer=""></script> -->
 		<script type="module" src="./index.js" referrerpolicy="no-referrer"></script>
 	</head>
 	<body>
@@ -47,7 +51,7 @@
 					</button>
 				</div>
 				<p class="description" data-field="description"></p>
-				<div>
+				<div class="due-container">
 					<span>Due:</span>
 					<time data-field="due"></time>
 				</div>
@@ -55,8 +59,9 @@
 					<span>Created:</span>
 					<time data-field="createdAt"></time>
 				</div>
-				<details data-field="attachments">
+				<details class="attachments-container">
 					<summary>Attachments</summary>
+					<div data-field="attachments"></div>
 				</details>
 			</div>
 		</template>

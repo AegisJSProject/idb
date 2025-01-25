@@ -1,4 +1,4 @@
-export const DB_VERSION = 1;
+export const DEFAULT_DB_VERSION = 1;
 
 /**
  * Commits the given transaction if it's not in read-only mode.
@@ -11,6 +11,52 @@ export function commitTransaction(transaction) {
 		return commitTransaction(transaction.transaction);
 	} else if (transaction instanceof IDBTransaction && transaction.mode !== 'readonly') {
 		transaction.commit();
+		return true;
+	} else {
+		return false;
+	}
+}
+
+/**
+ * Creates a new object store in the provided IndexedDB database. If an object store with the given name already exists, it returns null.
+ *
+ * @param {IDBDatabase} db The IndexedDB database instance.
+ * @param {string} name The name of the object store to create.
+ * @param {object} options Configuration options for the object store.
+ * @param {string} [options.keyPath] The key path for the object store.
+ * @param {boolean} [options.autoIncrement=false] Whether the object store should auto-increment keys.
+ * @param {Object<string, {keyPath:string|string[],unique?:boolean,multiEntry?:boolean}>} [options.indexes] An object defining indexes for the object store. The keys of this object are the index names, and the values are objects with `keyPath`, `unique`, and `multiEntry` properties.
+ * @returns {IDBObjectStore|null} The created IDBObjectStore, or null if an object store with the given name already exists.
+ * @throws {DOMException} If in error occurs in handling the request.
+ */
+export function createStore(db, name, {
+	keyPath,
+	autoIncrement = false,
+	indexes,
+} = {}) {
+	if (! db.objectStoreNames.contains(name)) {
+		const store = db.createObjectStore(name, { keyPath, autoIncrement });
+
+		if  (typeof indexes === 'object') {
+			for (const [index, { keyPath, unique = false, multiEntry = false }] of Object.entries(indexes)) {
+				store.createIndex(index, keyPath, { unique, multiEntry });
+			}
+		}
+	} else {
+		return null;
+	}
+}
+
+/**
+ * Deletes an object store from the provided IndexedDB database.
+ *
+ * @param {IDBDatabase} db The IndexedDB database instance.
+ * @param {string} store The name of the object store to delete.
+ * @returns {boolean} Returns true if the store was deleted, false if it did not exist.
+ */
+export function deleteStore(db, store) {
+	if (db.objectStoreNames.contains(store)) {
+		db.deleteObjectStore(store);
 		return true;
 	} else {
 		return false;
@@ -47,10 +93,10 @@ export function abortTransaction(transaction) {
 export function handleIDBRequest(request, { signal: passedSignal } = {}) {
 	const { resolve, reject, promise } = Promise.withResolvers();
 
-	if (passedSignal instanceof AbortSignal && passedSignal.aborted) {
-		reject(passedSignal.reason);
-	} else if (! (request instanceof IDBRequest)) {
+	if (! (request instanceof IDBRequest)) {
 		reject(new TypeError('Request must be an `IDBRequest`.'));
+	} else if (passedSignal instanceof AbortSignal && passedSignal.aborted) {
+		reject(passedSignal.reason);
 	} else {
 		const controller = new AbortController();
 
@@ -69,6 +115,13 @@ export function handleIDBRequest(request, { signal: passedSignal } = {}) {
 				controller.abort(target.error);
 				reject(target.error);
 			}, { signal, once: true });
+
+			if (passedSignal instanceof AbortSignal) {
+				passedSignal.addEventListener('abort', ({ target }) => {
+					reject(target.reason);
+					abortTransaction(target.reason);
+				}, { signal: controller.signal, once: true });
+			}
 		} catch(err) {
 			reject(err);
 			controller.abort(err);
@@ -86,36 +139,38 @@ export function handleIDBRequest(request, { signal: passedSignal } = {}) {
  * @param {Object} [config] Configuration options for opening the database.
  * @param {number} [config.version=1] The version of the database to open.
  * @param {Function} [config.onUpgrade] A function to be called if the database version is upgraded.
- * @param {object} [config.schema] - The database schema configuration.
- * @param {string} [config.schema.name] - The name of the database.
- * @param {number} [config.schema.version] - The version of the database.
- * @param {object<string, Object>} [config.schema.stores] - Object stores in the database.
- * @param {string} [config.schema.stores[].keyPath] - The key path for the object store.
- * @param {boolean} [config.schema.stores[].autoIncrement=false] - Whether the store's key should auto-increment.
- * @param {object<string, Object>} [config.schema.stores[].indexes] - Indexes for the object store.
- * @param {string} [config.schema.stores[].indexes[].keyPath] - The key path for the index.
- * @param {boolean} [config.schema.stores[].indexes[].multiEntry=false] - Whether the index allows multiple entries.
- * @param {boolean} [config.schema.stores[].indexes[].unique=false] - Whether the index enforces unique values.
- * @param {AbortSignal} [config.signal] An AbortSignal object to monitor for abort events.
+ * @param {object} [config.schema] The database schema configuration.
+ * @param {string} [config.schema.name] The name of the database.
+ * @param {number} [config.schema.version] The version of the database.
+ * @param {object<string, Object>} [config.schema.stores] Object stores in the database.
+ * @param {string} [config.schema.stores[].keyPath] The key path for the object store.
+ * @param {boolean} [config.schema.stores[].autoIncrement=false] Whether the store's key should auto-increment.
+ * @param {object<string, Object>} [config.schema.stores[].indexes] Indexes for the object store.
+ * @param {string} [config.schema.stores[].indexes[].keyPath] The key path for the index.
+ * @param {boolean} [config.schema.stores[].indexes[].multiEntry=false] Whether the index allows multiple entries.
+ * @param {boolean} [config.schema.stores[].indexes[].unique=false] Whether the index enforces unique values.
+ * @param {AbortSignal} [config.signal=AbortSignal.timeout(100)] An AbortSignal object to monitor for abort events.
  * @returns {Promise<IDBDatabase>} A promise that resolves to the opened IDBDatabase object.
  * @throws {Error} Any error of an aborted signal.
  * @throws {DOMException} If in error occurs in handling the request.
  */
 export async function openDB(name, {
-	version = DB_VERSION,
+	version = DEFAULT_DB_VERSION,
 	onUpgrade,
 	schema,
-	signal,
+	signal = AbortSignal.timeout(100),
 } = {}) {
 	if (signal instanceof AbortSignal && signal.aborted) {
 		throw signal.reason;
 	} else {
 		const request = indexedDB.open(name, version);
 
+		if (typeof schema === 'object') {
+			request.addEventListener('upgradeneeded', ({ target }) => upgradeDB(target, schema), { once: true, signal });
+		}
+
 		if (onUpgrade instanceof Function) {
 			request.addEventListener('upgradeneeded', onUpgrade, { signal, once: true });
-		} else if (typeof schema === 'object') {
-			request.addEventListener('upgradeneeded', ({ target }) => upgrade(target, schema), { once: true, signal });
 		}
 
 		return await handleIDBRequest(request, { signal });
@@ -159,7 +214,23 @@ export const getStoreReadOnly = (db, storeName) => getStore(db, storeName, { mod
  * @returns {IDBObjectStore} The object store.
  * @throws {TypeError|DOMException} For various errors that could occur accessing the object store.
  */
-export const getStoreReadWrite = (db, storeName, { durability = 'default' }) => getStore(db, storeName, { mode: 'readwrite', durability });
+export const getStoreReadWrite = (db, storeName, { durability = 'default' } = {}) => getStore(db, storeName, { mode: 'readwrite', durability });
+
+/**
+ * Clears all data from the specified object store in the given IndexedDB database.
+ *
+ * @param {IDBDatabase} db The IndexedDB database instance.
+ * @param {string} name The name of the object store to clear.
+ * @param {object} [options] Optional parameters.
+ * @param {AbortSignal} [options.signal] An AbortSignal to allow cancellation of the operation.
+ * @return {Promise<void>} A Promise that resolves when the store is cleared.
+ * @throws {Error} Any error of an aborted signal.
+ * @throws {DOMException} If in error occurs in handling the request.
+ */
+export async function clearStore(db, name, { signal } = {}) {
+	const store = getStoreReadWrite(db, name);
+	await handleIDBRequest(store.clear(), { signal });
+}
 
 /**
  * Gets an item from the given object store.
@@ -169,16 +240,17 @@ export const getStoreReadWrite = (db, storeName, { durability = 'default' }) => 
  * @param {IDBValidKey|IDBKeyRange} key The key of the item to get.
  * @param {Object} [options] Options for the operation.
  * @param {AbortSignal} [options.signal] An AbortSignal object to monitor for abort events.
+ * @param {any} [options.fallback=null] A default value to return if the item is not found.
  * @returns {Promise<any>} A promise that resolves to the item.
  * @throws {Error} Any error of an aborted signal.
  * @throws {TypeError|DOMException} For various errors that could occur accessing the object store.
  */
-export async function getItem(db, storeName, key, { signal } = {}) {
+export async function getItem(db, storeName, key, { signal, fallback } = {}) {
 	if (signal instanceof AbortSignal && signal.aborted) {
 		throw signal.reason;
 	} else {
 		const store = getStoreReadOnly(db, storeName);
-		return await handleIDBRequest(store.get(key), { signal });
+		return await handleIDBRequest(store.get(key), { signal }) ?? fallback;
 	}
 }
 
@@ -218,7 +290,7 @@ export async function getAllItems(db, storeName, query, { count, signal } = {}) 
  * @throws {Error} If the operation is aborted.
  * @throws {TypeError|DOMException} For various errors that could occur accessing the object store.
  */
-export async function putItem(db, storeName, value, { durability = 'default', key, signal } = {}) {
+export async function putItem(db, storeName, value, { key, durability = 'default', signal } = {}) {
 	if (signal instanceof AbortSignal && signal.aborted) {
 		throw signal.reason;
 	} else {
@@ -338,12 +410,14 @@ export async function *iterateObjectStore(db, storeName, {
 	direction = 'next',
 	signal,
 } = {}) {
-	if (signal instanceof AbortSignal && signal.aborted) {
-		throw signal.reason;
+	if (db instanceof IDBOpenDBRequest) {
+		yield *iterateObjectStore(db.result, storeName, { mode, durability, query, direction, signal });
 	} else if (! (db instanceof IDBDatabase)) {
 		throw new TypeError('Not an IDBDatabase instance.');
 	} else if (typeof storeName !== 'string' || storeName.length === 0) {
 		throw new TypeError('Store name must be a non-empty string.');
+	} else if (signal instanceof AbortSignal && signal.aborted) {
+		throw signal.reason;
 	} else {
 		const abrt = new AbortController();
 		const sig = signal instanceof AbortSignal ? AbortSignal.any([signal, abrt.signal]) : abrt.signal;
@@ -352,7 +426,7 @@ export async function *iterateObjectStore(db, storeName, {
 		const cursorRequest = store.openCursor(query, direction);
 		let deferred;
 
-		const stream = new ReadableStream({
+		yield *new ReadableStream({
 			start(controller) {
 				transaction.addEventListener('abort', ({ target }) => {
 					controller.error(target.error);
@@ -404,44 +478,48 @@ export async function *iterateObjectStore(db, storeName, {
 				transaction.abort();
 			}
 		});
-
-		yield *stream;
 	}
 }
 
 /**
+ * Upgrades an `IDBDatabase` on `IDBOpenDBRequest` using a database schema object.
  *
- * @param {IDBOpenDBRequest} req
- * @param {Object} schema - The database schema configuration.
- * @param {string} schema.name - The name of the database.
- * @param {number} schema.version - The version of the database.
- * @param {Object<string, Object>} schema.stores - Object stores in the database.
- * @param {string} schema.stores[].keyPath - The key path for the object store.
- * @param {boolean} [schema.stores[].autoIncrement=false] - Whether the store's key should auto-increment.
- * @param {Object<string, Object>} [schema.stores[].indexes] - Indexes for the object store.
- * @param {string} schema.stores[].indexes[].keyPath - The key path for the index.
- * @param {boolean} [schema.stores[].indexes[].multiEntry=false] - Whether the index allows multiple entries.
- * @param {boolean} [schema.stores[].indexes[].unique=false] - Whether the index enforces unique values.
+ * @param {IDBOpenDBRequest} req The result of an `indexedDB.open()` request.
+ * @param {Object} schema The database schema configuration.
+ * @param {string} schema.name The name of the database.
+ * @param {number} schema.version The version of the database.
+ * @param {Object<string, Object>} schema.stores Object stores in the database.
+ * @param {string} schema.stores[].keyPath The key path for the object store.
+ * @param {boolean} [schema.stores[].autoIncrement=false] Whether the store's key should auto-increment.
+ * @param {Object<string, {keyPath:string|string[],unique?:boolean,multiEntry?:boolean}>} [schema.stores.indexes] Indexes for the object store.
+ * @param {string} schema.stores[].indexes[].keyPath The key path for the index.
+ * @param {boolean} [schema.stores[].indexes[].multiEntry=false] Whether the index allows multiple entries.
+ * @param {boolean} [schema.stores[].indexes[].unique=false] Whether the index enforces unique values.
+ * @throws {DOMException} If in error occurs in handling the request.
  */
-function upgrade(req, schema) {
-	if (typeof schema === 'object' && typeof schema.stores === 'object') {
-		for (const storeName of req.result.objectStoreNames) {
-			if (! schema.stores.hasOwnProperty(storeName)) {
-				req.result.deleteObjectStore(storeName);
-			}
-		}
-
-		for (const [name, { keyPath, autoIncrement = false, indexes = [] }] of Object.entries(schema.stores)) {
-			if (! req.result.objectStoreNames.contains(name)) {
-				const store = req.result.createObjectStore(name, { keyPath, autoIncrement });
-
-				for (const [iName, { keyPath: iKeyPath, unique = false, multiEntry = false }] of Object.entries(indexes)) {
-					store.createIndex(iName, iKeyPath ?? iName, { unique, multiEntry });
+export function upgradeDB(req, schema) {
+	if (! (req instanceof IDBOpenDBRequest)) {
+		throw new TypeError('Not an `IDBOpenDBRequest`.');
+	} else if (typeof schema !== 'object') {
+		throw new TypeError('Invalid DB schema type.');
+	} else if (typeof schema.stores === 'object') {
+		try {
+			for (const storeName of req.result.objectStoreNames) {
+				if (! schema.stores.hasOwnProperty(storeName)) {
+					req.result.deleteObjectStore(storeName);
 				}
-			} else {
-				const store = req.transaction.objectStore(name);
+			}
 
-				try {
+			for (const [name, { keyPath, autoIncrement = false, indexes = {} }] of Object.entries(schema.stores)) {
+				if (! req.result.objectStoreNames.contains(name)) {
+					const store = req.result.createObjectStore(name, { keyPath, autoIncrement });
+
+					for (const [iName, { keyPath: iKeyPath, unique = false, multiEntry = false }] of Object.entries(indexes)) {
+						store.createIndex(iName, iKeyPath ?? iName, { unique, multiEntry });
+					}
+				} else {
+					const store = req.transaction.objectStore(name);
+
 					for (const index of store.indexNames) {
 						if (! indexes.hasOwnProperty(index)) {
 							store.deleteIndex(index);
@@ -453,11 +531,15 @@ function upgrade(req, schema) {
 							store.createIndex(iName, iKeyPath ?? iName, { unique, multiEntry });
 						}
 					}
-				} catch(err) {
-					req.transaction.abort();
-					reportError(err);
 				}
 			}
+		} catch(err) {
+			req.transaction.abort();
+			reportError(err);
 		}
+	} else if (typeof schema[req.result.name] === 'object') {
+		upgradeDB(req, schema[req.result]);
+	} else {
+		throw new TypeError('Invalid DB schema object.');
 	}
 }
