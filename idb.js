@@ -261,15 +261,20 @@ export async function getItem(db, storeName, key, { signal, fallback } = {}) {
  * @param {string} storeName The name of the object store to get items from.
  * @param {IDBValidKey|IDBKeyRange|null} query The query to use to filter items.
  * @param {Object} [options] Options for the operation.
+ * @param {string} [options.indexName] Optional index for the query.
  * @param {number|null} [options.count] The maximum number of items to return.
  * @param {AbortSignal} [options.signal] An AbortSignal object to monitor for abort events.
  * @returns {Promise<any[]>} A promise that resolves to an array of items.
  * @throws {Error} If the AbortSignal is aborted.
  * @throws {TypeError|DOMException} For various errors that could occur accessing the object store.
  */
-export async function getAllItems(db, storeName, query, { count, signal } = {}) {
+export async function getAllItems(db, storeName, query, { indexName, count, signal } = {}) {
 	if (signal instanceof AbortSignal && signal.aborted) {
 		throw signal.reason;
+	} else if (typeof indexName === 'string' && indexName.length !== 0) {
+		const store = getStoreReadOnly(db, storeName);
+		const index = store.index(indexName);
+		return await handleIDBRequest(index.getAll(query, count));
 	} else {
 		const store = getStoreReadOnly(db, storeName);
 		return await handleIDBRequest(store.getAll(query, count));
