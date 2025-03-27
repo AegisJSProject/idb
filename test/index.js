@@ -11,13 +11,13 @@ const STORE_NAME = 'list';
 export const SCHEMAS = {
 	todos: {
 		name: 'todos',
-		version: 4,
+		version: 5,
 		stores: {
 			list: {
 				keyPath: 'id',
 				autoIncrement: false,
 				indexes: {
-					name: { unique: 'true' },
+					title: { unique: 'true' },
 				},
 			},
 			second: {
