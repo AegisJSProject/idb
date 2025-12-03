@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.0.5] - 2025-12-03
+
+### Added
+- Add `putAllItems()` to `put()` multiple items in a single transaction
+
 ## [v1.0.4] - 2025-03-27
 
 ### Added

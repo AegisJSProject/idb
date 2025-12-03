@@ -305,6 +305,91 @@ export async function putItem(db, storeName, value, { key, durability = 'default
 }
 
 /**
+ * Bulk puts items into the specified object store using a single transaction.
+ *
+ * @param {IDBDatabase} db The database.
+ * @param {string} storeName The store name.
+ * @param {any[]} items The items to add/update.
+ * @param {Object} [options] Options.
+ * @param {IDBTransactionDurability} [options.durability="default"] Controls how quickly changes are written to disk.
+ * @param {AbortSignal} [options.signal] Abort signal.
+ * @returns {Promise<IDBValidKey[]>} A promise that resolves with an array of keys.
+ */
+export async function putAllItems(db, storeName, items, { durability = 'default', signal } = {}) {
+	if (! Array.isArray(items)) {
+		throw new TypeError('Items must be an array.');
+	} else if (items.length === 1) {
+		return [await putItem(db, storeName, items[0], { durability, signal: signal })];
+	} else if (signal instanceof AbortSignal && signal.aborted) {
+		throw signal.reason;
+	} else if (items.length === 0) {
+		return [];
+	} else {
+		const { resolve, reject, promise } = Promise.withResolvers();
+		const controller = new AbortController();
+
+		try {
+			const store = getStoreReadWrite(db, storeName, { durability });
+			const transaction = store.transaction;
+			const promises = new Array(items.length);
+
+			transaction.addEventListener('error', ({ target }) => {
+				controller.abort(target.error);
+				reject(target.error);
+				target.abort();
+			}, { once: true, signal: controller.signal });
+
+			transaction.addEventListener('abort', ({ target }) => {
+				controller.abort(target.error);
+				reject(target.error);
+			}, { once: true, signal: controller.signal });
+
+			transaction.addEventListener('complete', () => {
+				Promise.all(promises)
+					.then(resolve, reject)
+					.finally(() => controller.abort());
+			}, { once: true, signal: controller.signal });
+
+			if (signal instanceof AbortSignal) {
+				signal.addEventListener('abort', ({ target }) => {
+					reject(target.reason);
+					controller.abort(target.reason);
+					transaction.abort();
+				}, { once: true, signal: controller.signal });
+			}
+
+			for (let i = 0; i < items.length; i++) {
+				if (controller.signal.aborted) {
+					promises[i] = Promise.reject(controller.signal.reason);
+				} else {
+					const { resolve, reject, promise } = Promise.withResolvers();
+					const reqController = new AbortController();
+					const req = store.put(items[i]);
+					promises[i] = promise;
+
+					req.addEventListener('success', ({ target }) => {
+						resolve(target.result);
+						reqController.abort();
+					}, { once: true, signal: reqController.signal });
+
+					req.addEventListener('error', ({ target }) => {
+						reject(target.error);
+						reqController.abort(target.error);
+						controller.abort(target.error);
+						transaction.abort();
+					}, { once: true, signal: reqController.signal });
+				}
+			}
+		} catch(err) {
+			controller.abort(err);
+			reject(err);
+		}
+
+		return promise;
+	}
+}
+
+/**
  * Adds an item to the specified object store.
  *
  * @param {IDBDatabase} db The database.
