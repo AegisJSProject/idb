@@ -3,10 +3,12 @@ import { baseTheme, darkTheme, lightTheme } from '@aegisjsproject/styles/theme.j
 import { btn, btnPrimary, btnSuccess, btnDanger } from '@aegisjsproject/styles/button.js';
 import { forms } from '@aegisjsproject/styles/forms.js';
 import { statusBoxes, positions, floats, displays, fonts, utilities } from '@aegisjsproject/styles/misc.js';
-import { deleteItem, addItem, openDB, getItem, putItem, getAllItems } from '@aegisjsproject/idb';
+import { deleteItem, addItem, openDB, getItem, putItem, getAllItems, makeDisposable } from '@aegisjsproject/idb';
 import { css } from '@aegisjsproject/parsers/css.js';
 
 const STORE_NAME = 'list';
+
+makeDisposable();
 
 export const SCHEMAS = {
 	todos: {
@@ -27,12 +29,12 @@ export const SCHEMAS = {
 	},
 };
 
-async function open(name, { signal = AbortSignal.timeout(100) } = {}) {
-	return await openDB(SCHEMAS[name].name, { version: SCHEMAS[name].version, schema: SCHEMAS[name], signal });
+async function open(name, { signal, stack } = {}) {
+	return await openDB(SCHEMAS[name].name, { version: SCHEMAS[name].version, schema: SCHEMAS[name], signal, stack });
 }
 
 async function render({ signal } = {}) {
-	const db = await open('todos', { signal });
+	using db = await open('todos', { signal });
 
 	try {
 		const template = document.getElementById('todo-template');
@@ -54,8 +56,6 @@ async function render({ signal } = {}) {
 		document.getElementById('todo-list').append(...tasks.map(todo => createTodo(todo, template)));
 	} catch(err) {
 		handleError(err);
-	} finally {
-		db.close();
 	}
 }
 
@@ -161,7 +161,7 @@ document.adoptedStyleSheets = [
 
 document.getElementById('create-todo').addEventListener('submit', async event => {
 	event.preventDefault();
-	const db = await open('todos');
+	using db = await open('todos');
 
 	try {
 		const item = new FormData(event.target);
@@ -181,8 +181,6 @@ document.getElementById('create-todo').addEventListener('submit', async event =>
 		event.target.reset();
 	} catch(err) {
 		handleError(err);
-	} finally {
-		db.close();
 	}
 });
 
@@ -191,7 +189,7 @@ document.body.addEventListener('click', async ({ target }) => {
 
 	if (btn instanceof HTMLButtonElement && btn.dataset.hasOwnProperty('taskId')) {
 		const container = target.closest('.todo-item');
-		const db = await open('todos');
+		using db = await open('todos');
 
 		try {
 			await Promise.all([
@@ -208,15 +206,13 @@ document.body.addEventListener('click', async ({ target }) => {
 			container.remove();
 		} catch(err) {
 			handleError(err);
-		} finally {
-			db.close();
 		}
 	}
 }, { passive: true });
 
 document.body.addEventListener('change', async ({ target }) => {
 	if (target.classList.contains('task-done') && target.dataset.hasOwnProperty('taskId')) {
-		const db = await open('todos');
+		using db = await open('todos');
 
 		try {
 			const task = await getItem(db, STORE_NAME, target.dataset.taskId);
@@ -225,8 +221,6 @@ document.body.addEventListener('change', async ({ target }) => {
 			await putItem(db, STORE_NAME, task);
 		} catch(err) {
 			handleError(err);
-		} finally {
-			db.close();
 		}
 	}
 }, { passive: true });

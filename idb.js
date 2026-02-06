@@ -1,6 +1,24 @@
 export const DEFAULT_DB_VERSION = 1;
 
 /**
+ * Opt-in to implementing the disposal protocol on `IDBDatabase`. This will enable
+ * automatic closure of a DB when it leaves scope via `using db = ...`.
+ *
+ * @returns {boolean} Whether or not the disposal method was successfully added.
+ */
+export function makeDisposable() {
+	if (typeof Symbol.dispose === 'symbol' && typeof IDBDatabase.prototype[Symbol.dispose] === 'undefined') {
+		IDBDatabase.prototype[Symbol.dispose] = function() {
+			this.close();
+		};
+
+		return true;
+	} else {
+		return false;
+	}
+}
+
+/**
  * Commits the given transaction if it's not in read-only mode.
  *
  * @param {IDBTransaction|IDBRequest|null} transaction The transaction to commit.
@@ -149,7 +167,8 @@ export function handleIDBRequest(request, { signal: passedSignal } = {}) {
  * @param {string} [config.schema.stores[].indexes[].keyPath] The key path for the index.
  * @param {boolean} [config.schema.stores[].indexes[].multiEntry=false] Whether the index allows multiple entries.
  * @param {boolean} [config.schema.stores[].indexes[].unique=false] Whether the index enforces unique values.
- * @param {AbortSignal} [config.signal=AbortSignal.timeout(100)] An AbortSignal object to monitor for abort events.
+ * @param {DisposableStack|AsyncDisposableStack} [config.stack] Optional `DisposableStack` to close DB when the stack is disposed.
+ * @param {AbortSignal} [config.signal)] An AbortSignal object to monitor for abort events.
  * @returns {Promise<IDBDatabase>} A promise that resolves to the opened IDBDatabase object.
  * @throws {Error} Any error of an aborted signal.
  * @throws {DOMException} If in error occurs in handling the request.
@@ -158,7 +177,8 @@ export async function openDB(name, {
 	version = DEFAULT_DB_VERSION,
 	onUpgrade,
 	schema,
-	signal = AbortSignal.timeout(100),
+	stack,
+	signal,
 } = {}) {
 	if (signal instanceof AbortSignal && signal.aborted) {
 		throw signal.reason;
@@ -173,8 +193,11 @@ export async function openDB(name, {
 			request.addEventListener('upgradeneeded', onUpgrade, { signal, once: true });
 		}
 
-		return await handleIDBRequest(request, { signal });
-
+		if ('DisposableStack' in globalThis && (stack instanceof DisposableStack || stack instanceof AsyncDisposableStack)) {
+			return stack.adopt(await handleIDBRequest(request, { signal }), db => db.close());
+		} else {
+			return await handleIDBRequest(request, { signal });
+		}
 	}
 }
 
@@ -479,6 +502,7 @@ export async function getAllKeys(db, storeName, { query, count, signal } = {}) {
 
 /**
  * Opens an IDB Cursor as an asynchronous iterable, allowing iteration over the results of a database query.
+ * Note that iterating/consuming **MUST** be synchronous to keep the transaction open.
  *
  * @async
  * @generator

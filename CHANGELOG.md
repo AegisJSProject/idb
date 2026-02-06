@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.0.6] - 2026-02-06
+
+### Added
+- Add disposablity support (either `using` or `DisposableStack`)
+
 ## [v1.0.5] - 2025-12-03
 
 ### Added
