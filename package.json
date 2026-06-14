@@ -1,6 +1,6 @@
 {
   "name": "@aegisjsproject/idb",
-  "version": "1.0.6",
+  "version": "1.1.0",
   "description": "Simple, promise-based IndexedDB CRUD library.",
   "keywords": [
     "idb",
@@ -80,5 +80,8 @@
     "@shgysk8zer0/eslint-config": "^1.0.7",
     "http-server": "^14.1.1",
     "rollup": "^4.59.0"
+  },
+  "allowScripts": {
+    "fsevents@2.3.3": true
   }
 }
