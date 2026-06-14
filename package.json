@@ -77,9 +77,9 @@
   "homepage": "https://github.com/AegisJSProject/idb#readme",
   "devDependencies": {
     "@rollup/plugin-terser": "^1.0.0",
-    "@shgysk8zer0/eslint-config": "^1.0.7",
+    "@shgysk8zer0/eslint-config": "^1.1.0",
     "http-server": "^14.1.1",
-    "rollup": "^4.59.0"
+    "rollup": "^4.62.0"
   },
   "allowScripts": {
     "fsevents@2.3.3": true
